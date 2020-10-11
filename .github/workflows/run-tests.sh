@@ -40,3 +40,7 @@ if [ -z "$NO_COMMON_TESTS" ]; then
     fi
   fi
 fi
+if [ -n "$WITH_VINEYARD" ]; then
+  pytest -s -vvv mars/dataframe/datastore/tests/test_datastore_execute.py -k "vineyard"
+  pytest -s -vvv mars/tensor/datastore/tests/test_datastore_execute.py -k "vineyard"
+fi
