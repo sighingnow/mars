@@ -74,7 +74,7 @@ jobs:
     - name: Get vineyard runtime
       shell: bash
       run: |
-        sudo docker pull libvineyard:vineyardd:latest
+        sudo docker pull libvineyard/vineyardd:latest
         pip3 install vineyard
 
     - name: Launch vineyard
