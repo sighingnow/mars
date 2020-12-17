@@ -17,8 +17,8 @@ if [ -n "$WITH_CYTHON" ]; then
   coverage report
 fi
 if [ -n "$WITH_VINEYARD" ]; then
-  pytest mars/dataframe/datastore/tests/test_datastore_execute.py -k "vineyard"
-  pytest mars/tensor/datastore/tests/test_datastore_execute.py -k "vineyard"
+  pytest $PYTEST_CONFIG --cov-config .coveragerc mars/dataframe/datastore/tests/test_datastore_execute.py -k "vineyard"
+  pytest $PYTEST_CONFIG --cov-config .coveragerc mars/tensor/datastore/tests/test_datastore_execute.py -k "vineyard"
 fi
 if [ -z "$NO_COMMON_TESTS" ]; then
   if [[ "$UNAME" == "windows" ]]; then
