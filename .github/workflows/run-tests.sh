@@ -16,6 +16,10 @@ if [ -n "$WITH_CYTHON" ]; then
     mars/optimizes mars/scheduler mars/tests mars/web
   coverage report
 fi
+if [ -n "$WITH_VINEYARD" ]; then
+  pytest mars/dataframe/datastore/tests/test_datastore_execute.py -k "vineyard"
+  pytest mars/tensor/datastore/tests/test_datastore_execute.py -k "vineyard"
+fi
 if [ -z "$NO_COMMON_TESTS" ]; then
   if [[ "$UNAME" == "windows" ]]; then
     export NO_SERIALIZE_IN_TEST_EXECUTOR=1
@@ -39,8 +43,4 @@ if [ -z "$NO_COMMON_TESTS" ]; then
       source $DEFAULT_VENV/bin/activate
     fi
   fi
-fi
-if [ -n "$WITH_VINEYARD" ]; then
-  pytest -s -vvv mars/dataframe/datastore/tests/test_datastore_execute.py -k "vineyard"
-  pytest -s -vvv mars/tensor/datastore/tests/test_datastore_execute.py -k "vineyard"
 fi

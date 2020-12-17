@@ -74,14 +74,16 @@ jobs:
     - name: Get vineyard runtime
       shell: bash
       run: |
-        sudo docker pull libvineyard/vineyardd:latest
+        source ./.github/workflows/reload-env.sh
         pip3 install vineyard
+
+        sudo docker pull libvineyard/vineyardd:latest
 
     - name: Launch vineyard
       shell: bash
       run: |
         sudo docker run --rm -d --name vineyard -v /tmp/vineyard:/var/run libvineyard/vineyardd:latest
-        until [ -f /tmp/vineyard/vineyard.sock ]
+        until [ -S /tmp/vineyard/vineyard.sock ]
         do
             sleep 1
         done
@@ -91,11 +93,9 @@ jobs:
     - name: Test with pytest
       env:
         WITH_VINEYARD: true
+        NO_COMMON_TESTS: true
       shell: bash
       run: |
-        sudo docker run --rm -d --name vineyard -v /tmp/vineyard:/var/run libvineyard/vineyardd:latest
-        sudo chmod a+wrx /tmp/vineyard/vineyard.sock
-
         source ./.github/workflows/reload-env.sh
         source ./.github/workflows/run-tests.sh
 
