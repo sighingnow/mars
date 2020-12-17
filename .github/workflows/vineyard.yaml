@@ -81,6 +81,11 @@ jobs:
       shell: bash
       run: |
         sudo docker run --rm -d --name vineyard -v /tmp/vineyard:/var/run libvineyard/vineyardd:latest
+        until [ -f /tmp/vineyard/vineyard.sock ]
+        do
+            sleep 1
+        done
+        echo "Vineyard service ready"
         sudo chmod a+wrx /tmp/vineyard/vineyard.sock
 
     - name: Test with pytest
