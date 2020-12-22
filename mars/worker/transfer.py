@@ -176,9 +176,10 @@ class SenderActor(WorkerActor):
 
         try:
             if options.vineyard.socket:
-                source_devices = [DataStorageDevice.VINEYARD, DataStorageDevice.DISK]  # pragma: no cover
+                in_memory_device = DataStorageDevice.VINEYARD
             else:
-                source_devices = [DataStorageDevice.SHARED_MEMORY, DataStorageDevice.DISK]
+                in_memory_device = DataStorageDevice.SHARED_MEMORY
+            source_devices = [in_memory_device, DataStorageDevice.DISK]  # pragma: no cover
             _create_local_readers().then(_create_remote_writers) \
                 .then(lambda *_: self._compress_and_send(
                     session_id, addrs_to_chunks, receiver_refs, keys_to_readers,
@@ -824,9 +825,10 @@ class ResultSenderActor(WorkerActor):
             compression_type = dataserializer.CompressType(options.worker.transfer_compression)
         if index_obj is None:
             if options.vineyard.socket:
-                target_devs = [DataStorageDevice.VINEYARD, DataStorageDevice.DISK]  # pragma: no cover
+                in_memory_device = DataStorageDevice.VINEYARD
             else:
-                target_devs = [DataStorageDevice.SHARED_MEMORY, DataStorageDevice.DISK]
+                in_memory_device = DataStorageDevice.SHARED_MEMORY
+            target_devs = [in_memory_device, DataStorageDevice.DISK]  # pragma: no cover
             ev = self._result_copy_ref.start_copy(session_id, chunk_key, target_devs)
             if ev:
                 ev.wait(options.worker.prepare_data_timeout)
