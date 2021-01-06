@@ -200,6 +200,7 @@ class PlasmaSharedStore(object):
         """
         Get raw buffer from plasma store
         """
+        logger.debug('get_buffer: session_id = %s, data_key = %s, type=%s', session_id, data_key, type(data_key))
         obj_id = self._get_object_id(session_id, data_key)
         [buf] = self._plasma_client.get_buffers([obj_id], timeout_ms=10)
         if buf is None:
@@ -292,6 +293,51 @@ class PlasmaSharedStore(object):
                 return False
         except KeyError:
             return False
+
+    def delete(self, session_id, data_key):
+        self._mapper_ref.delete(session_id, data_key)
+
+    def batch_delete(self, session_id, data_keys):
+        self._mapper_ref.batch_delete(session_id, data_keys)
+
+
+class VineyardStore(object):
+    """
+    Mocking PlasmaStore
+    """
+    def __init__(self, mapper_ref):
+        from ...serialize.dataserializer import mars_serialize_context
+
+        self._size_limit = 1000000
+        self._serialize_context = mars_serialize_context()
+
+        self._mapper_ref = mapper_ref
+        self._pool = mapper_ref.ctx.threadpool(1)
+
+        self._plasma_dir = options.worker.plasma_dir
+        self._plasma_limit = calc_size_by_str(
+            options.worker.plasma_limit, psutil.disk_usage(self._plasma_dir).total)
+
+    def get_actual_capacity(self, store_limit):
+        """
+        Get actual capacity of plasma store
+        :return: actual storage size in bytes
+        """
+
+        if self._size_limit is None:
+            left_size = store_limit
+            alloc_fraction = 1
+            while True:
+                allocate_size = int(left_size * alloc_fraction / PAGE_SIZE) * PAGE_SIZE
+            self._size_limit = allocate_size
+        return self._size_limit
+
+    def _check_plasma_limit(self, size):
+        if self._plasma_limit is not None:
+            used_size = psutil.disk_usage(self._plasma_dir).used
+            if used_size + size > self._plasma_limit:
+                raise plasma_errors.PlasmaStoreFull
+
 
     def delete(self, session_id, data_key):
         self._mapper_ref.delete(session_id, data_key)

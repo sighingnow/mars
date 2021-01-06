@@ -63,6 +63,8 @@ class LocalDistributedCluster(object):
             self._calc_scheduler_worker_n_process(n_process,
                                                   scheduler_n_process,
                                                   worker_n_process)
+        print('scheduler_process', self._scheduler_n_process)
+        print('worker_n_process', self._worker_n_process)
 
     @property
     def pool(self):

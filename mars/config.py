@@ -406,6 +406,8 @@ default_options.register_option('optimize_tileable_graph', True, validator=is_bo
 
 # eager mode
 default_options.register_option('eager_mode', False, validator=is_bool)
+# default_options.register_option('eager_mode', True, validator=is_bool)
+
 
 # client serialize type
 default_options.register_option('client.serial_type', 'arrow', validator=is_string)
@@ -414,7 +416,8 @@ default_options.register_option('client.serial_type', 'arrow', validator=is_stri
 default_options.register_option('custom_log_dir', None, validator=any_validator(is_null, is_string))
 
 # vineyard
-default_options.register_option('vineyard.socket', '/tmp/vineyard/vineyard.sock')
+# default_options.register_option('vineyard.socket', '/tmp/vineyard/vineyard.sock')
+default_options.register_option('vineyard.socket', None)
 
 _options_local = threading.local()
 _options_local.default_options = default_options

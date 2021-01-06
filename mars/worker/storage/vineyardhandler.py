@@ -140,7 +140,7 @@ class VineyardHandler(StorageHandler, ObjectStorageMixin):
         logger.debug('find mapper ref done: %s', VineyardKeyMapActor.default_uid())
 
     def _new_object_id(self, session_id, data_key, data_id):
-        logger.debug('mapper put: session_id = %s, data_key = %s, data_id = %r', session_id, data_key, data_id)
+        # logger.debug('mapper put: session_id = %s, data_key = %s, data_id = %r, type=%s', session_id, data_key, data_id, type(data_key))
         self._mapper_ref.put(session_id, data_key, data_id)
 
     def _get_object_id(self, session_id, data_key):
@@ -205,6 +205,7 @@ class VineyardHandler(StorageHandler, ObjectStorageMixin):
         data_ids = [self._get_object_id(session_id, data_key)
                     for data_key in data_keys]
         self._client.delete(data_ids, deep=True)
+        self._mapper_ref.batch_delete(session_id, data_keys)
         self.unregister_data(session_id, data_keys, _tell=_tell)
 
 

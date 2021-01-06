@@ -283,6 +283,8 @@ class AssignEvaluationActor(SchedulerActor):
         """
         Allocate resources given the order in AssignerActor
         """
+        print('worker count', self._resource_ref.get_worker_count())
+        print('worker meta', self._resource_ref.get_workers_meta())
         t = time.time()
         if self._worker_metrics is None or self._worker_metric_time + 1 < time.time():
             # update worker metrics from ResourceActor
@@ -363,6 +365,8 @@ class AssignEvaluationActor(SchedulerActor):
             if missing_keys:
                 raise DependencyMissing(f'Dependencies {missing_keys!r} missing for operand {op_key}')
 
+        print('target_worker', target_worker)
+        print('workers', list(self._worker_metrics.keys()))
         if target_worker is None:
             input_sizes = dict((k, v.chunk_size) for k, v in input_metas.items())
             who_has = dict((k, meta.workers) for k, meta in input_metas.items())
@@ -395,6 +399,7 @@ class AssignEvaluationActor(SchedulerActor):
         timeout_on_fail = time.time() - last_assign > options.scheduler.assign_timeout
 
         rejects = []
+        print('candidate_workers', candidate_workers)
         for worker_ep in candidate_workers:
             if self._resource_ref.allocate_resource(
                     session_id, op_key, worker_ep, alloc_dict, log_fail=timeout_on_fail):

@@ -299,6 +299,7 @@ class SharedHolderActor(ObjectHolderActor):
 
     def post_create(self):
         super().post_create()
+        logger.info('create object holder actor')
         self._size_limit = self._shared_store.get_actual_capacity(self._size_limit)
         logger.info('Detected actual plasma store size: %s', readable_size(self._size_limit))
 
