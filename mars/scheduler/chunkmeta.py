@@ -69,7 +69,6 @@ class ChunkMetaStore(object):
         except KeyError:
             pass
 
-        # self._chunk_metas[chunk_key] = worker_meta
         print('chun_key', chunk_key, 'original worker', worker_meta.workers)
         if options.vineyard.socket:
             update_workers = set()
@@ -79,6 +78,7 @@ class ChunkMetaStore(object):
             worker_meta.workers = tuple(update_workers)
 
         print('chun_key', chunk_key, 'belong to workers', worker_meta.workers)
+        self._chunk_metas[chunk_key] = worker_meta
         worker_chunks = self._worker_to_chunk_keys
         for w in worker_meta.workers:
             worker_chunks[w].add(chunk_key)
@@ -479,11 +479,6 @@ class ChunkMetaClient(object):
     def get_chunk_shape(self, session_id, chunk_key):
         meta = self.get_chunk_meta(session_id, chunk_key)
         return meta.chunk_shape if meta is not None else None
-
-    def register_worker(self, worker, instance_id):
-        addr = self._cluster_info.get_schedulers()[0]
-        self.ctx.actor_ref(ChunkMetaActor.default_uid(), address=addr) \
-            .register_worker(worker, instance_id)
 
     def add_worker(self, session_id, chunk_key, worker_addr, _tell=False, _wait=True):
         self.set_chunk_meta(session_id, chunk_key, workers=(worker_addr,), _tell=_tell, _wait=_wait)
