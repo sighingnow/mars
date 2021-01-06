@@ -140,7 +140,7 @@ class VineyardHandler(StorageHandler, ObjectStorageMixin):
         logger.debug('find mapper ref done: %s', VineyardKeyMapActor.default_uid())
 
     def _new_object_id(self, session_id, data_key, data_id):
-        # logger.debug('mapper put: session_id = %s, data_key = %s, data_id = %r, type=%s', session_id, data_key, data_id, type(data_key))
+        logger.debug('mapper put: session_id = %s, data_key = %s, data_id = %r, type=%s', session_id, data_key, data_id, type(data_key))
         self._mapper_ref.put(session_id, data_key, data_id)
 
     def _get_object_id(self, session_id, data_key):

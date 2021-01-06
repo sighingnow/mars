@@ -130,7 +130,7 @@ class WorkerApplication(BaseApplication):
             write_shuffle_to_disk=self.args.write_shuffle_to_disk,
         )
         # start plasma
-        # self._service.start_plasma()
+        self._service.start_plasma()
 
         self.n_process = self._service.n_process
         kwargs['distributor'] = MarsDistributor(self.n_process, 'w:0:')

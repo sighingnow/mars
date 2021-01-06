@@ -50,6 +50,10 @@ class ChunkMetaStore(object):
     def __init__(self):
         self._chunk_metas = dict()
         self._worker_to_chunk_keys = defaultdict(set)
+        if options.vineyard.socket:
+            self._instance_workers_map = defaultdict(set)
+            self._worker_instance_map = dict()
+
 
     def __contains__(self, chunk_key):
         return chunk_key in self._chunk_metas
@@ -64,7 +68,13 @@ class ChunkMetaStore(object):
         except KeyError:
             pass
 
-        self._chunk_metas[chunk_key] = worker_meta
+        # self._chunk_metas[chunk_key] = worker_meta
+        if options.vineyard.socket:
+            update_workers = set()
+            instance_id = self._worker_instance_map[meta.workers[0]]
+            for w in self._instance_workers_map[instance_id]:
+                update_workers.add(w)
+            worker_meta.workers = tuple(update_workers)
 
         worker_chunks = self._worker_to_chunk_keys
         for w in worker_meta.workers:
@@ -84,6 +94,11 @@ class ChunkMetaStore(object):
                 worker_to_chunk_keys[w].remove(chunk_key)
             except KeyError:
                 pass
+
+    def register_worker(self, worker, instance_id):
+        logger.debug('register worker %s to %s', worker, instance_id)
+        self._instance_workers_map[instance_id].insert(worker)
+        self._worker_instance_map[worker] = instance_id
 
     def get(self, chunk_key, default=None):
         return self._chunk_metas.get(chunk_key, default)
@@ -447,6 +462,9 @@ class ChunkMetaClient(object):
     def get_chunk_shape(self, session_id, chunk_key):
         meta = self.get_chunk_meta(session_id, chunk_key)
         return meta.chunk_shape if meta is not None else None
+
+    def register_worker(self, worker, instance_id):
+        self._local_meta_store_ref.register_worker(worker, instance_id)
 
     def add_worker(self, session_id, chunk_key, worker_addr, _tell=False, _wait=True):
         self.set_chunk_meta(session_id, chunk_key, workers=(worker_addr,), _tell=_tell, _wait=_wait)
