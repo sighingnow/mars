@@ -44,11 +44,6 @@ class StatusReporterActor(WorkerActor):
         self._status_ref = self.ctx.actor_ref(StatusActor.default_uid())
         self._resource_ref = self.get_actor_ref(ResourceActor.default_uid())
         self.ref().collect_status(_tell=True)
-        if options.vineyard.socket:  # pragma: no cover
-            # worker_metas= self._resource_ref.get_worker_metas()
-            # instance_id = worker_metas[self._endpoint]['vineyard']['instance_id']
-            logger.debug('client register worker %s to %s', self._endpoint, 17)
-            self.get_meta_client().register_worker(self._endpoint, 17)
 
     def enable_status_upload(self):
         self._upload_status = True
@@ -65,8 +60,8 @@ class StatusReporterActor(WorkerActor):
             cpu_percent = resource.cpu_percent()
             disk_io = resource.disk_io_usage()
             net_io = resource.net_io_usage()
-            # if cpu_percent is None or disk_io is None or net_io is None:
-            #     return
+            if cpu_percent is None or disk_io is None or net_io is None:
+                return
             hw_metrics = dict()
             hw_metrics['cpu'] = max(0.0, resource.cpu_count() - cpu_percent / 100.0)
             hw_metrics['cpu_used'] = cpu_percent / 100.0
@@ -176,7 +171,6 @@ class StatusReporterActor(WorkerActor):
                 client = vineyard.connect(options.vineyard.socket)
                 meta_dict['vineyard'] = {'instance_id': client.instance_id}
 
-            logger.debug('collect status on %s', self._endpoint)
             self._resource_ref.set_worker_meta(self._endpoint, meta_dict)
         except Exception as ex:
             logger.error('Failed to save status: %s. repr(meta_dict)=%r', str(ex), meta_dict)

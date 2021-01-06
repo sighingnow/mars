@@ -18,6 +18,7 @@ import os
 from collections import defaultdict, OrderedDict
 
 from .kvstore import KVStoreActor
+from .resource import ResourceActor
 from .utils import SchedulerActor, CombinedFutureWaiter
 from ..config import options
 from ..utils import BlacklistSet
@@ -69,13 +70,15 @@ class ChunkMetaStore(object):
             pass
 
         # self._chunk_metas[chunk_key] = worker_meta
+        print('chun_key', chunk_key, 'original worker', worker_meta.workers)
         if options.vineyard.socket:
             update_workers = set()
-            instance_id = self._worker_instance_map[meta.workers[0]]
+            instance_id = self._worker_instance_map[worker_meta.workers[0]]
             for w in self._instance_workers_map[instance_id]:
                 update_workers.add(w)
             worker_meta.workers = tuple(update_workers)
 
+        print('chun_key', chunk_key, 'belong to workers', worker_meta.workers)
         worker_chunks = self._worker_to_chunk_keys
         for w in worker_meta.workers:
             worker_chunks[w].add(chunk_key)
@@ -95,10 +98,12 @@ class ChunkMetaStore(object):
             except KeyError:
                 pass
 
-    def register_worker(self, worker, instance_id):
-        logger.debug('register worker %s to %s', worker, instance_id)
-        self._instance_workers_map[instance_id].insert(worker)
-        self._worker_instance_map[worker] = instance_id
+    def update_workers_meta(self, workers_meta):
+        for w, meta in workers_meta.items():
+            instance_id = meta['vineyard']['instance_id']
+            self._worker_instance_map[w] = instance_id
+            self._instance_workers_map[instance_id].add(w)
+        logger.debug('worker_instance_map, %s instance_workers_map %s', self._worker_instance_map, self._instance_workers_map)
 
     def get(self, chunk_key, default=None):
         return self._chunk_metas.get(chunk_key, default)
@@ -184,6 +189,7 @@ class ChunkMetaActor(SchedulerActor):
         self._chunk_info_uid = chunk_info_uid
 
         self._kv_store_ref = None
+        self._resource_ref = None
         self._worker_blacklist = BlacklistSet(options.scheduler.worker_blacklist_time)
 
     def post_create(self):
@@ -193,6 +199,10 @@ class ChunkMetaActor(SchedulerActor):
         self._kv_store_ref = self.ctx.actor_ref(KVStoreActor.default_uid())
         if not self.ctx.has_actor(self._kv_store_ref):
             self._kv_store_ref = None
+
+        self._resource_ref = self.ctx.actor_ref(ResourceActor.default_uid())
+        if not self.ctx.has_actor(self._resource_ref):
+            self._resource_ref = None
 
     def set_chunk_broadcasts(self, session_id, chunk_key, broadcast_dests):
         """
@@ -236,6 +246,13 @@ class ChunkMetaActor(SchedulerActor):
         :param workers: workers holding the chunk
         :param broadcast: broadcast meta into registered destinations
         """
+        if options.vineyard.socket:
+            if self._resource_ref is None:
+                self._resource_ref = self.ctx.actor_ref(ResourceActor.default_uid())
+            workers_meta = self._resource_ref.get_workers_meta()
+            self._meta_store.update_workers_meta(workers_meta)
+            self._meta_cache.update_workers_meta(workers_meta)
+
         query_key = (session_id, chunk_key)
 
         workers = workers or ()
@@ -464,7 +481,9 @@ class ChunkMetaClient(object):
         return meta.chunk_shape if meta is not None else None
 
     def register_worker(self, worker, instance_id):
-        self._local_meta_store_ref.register_worker(worker, instance_id)
+        addr = self._cluster_info.get_schedulers()[0]
+        self.ctx.actor_ref(ChunkMetaActor.default_uid(), address=addr) \
+            .register_worker(worker, instance_id)
 
     def add_worker(self, session_id, chunk_key, worker_addr, _tell=False, _wait=True):
         self.set_chunk_meta(session_id, chunk_key, workers=(worker_addr,), _tell=_tell, _wait=_wait)

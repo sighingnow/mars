@@ -200,7 +200,6 @@ class PlasmaSharedStore(object):
         """
         Get raw buffer from plasma store
         """
-        logger.debug('get_buffer: session_id = %s, data_key = %s, type=%s', session_id, data_key, type(data_key))
         obj_id = self._get_object_id(session_id, data_key)
         [buf] = self._plasma_client.get_buffers([obj_id], timeout_ms=10)
         if buf is None:
