@@ -51,10 +51,6 @@ class ChunkMetaStore(object):
     def __init__(self):
         self._chunk_metas = dict()
         self._worker_to_chunk_keys = defaultdict(set)
-        if options.vineyard.socket:
-            self._instance_workers_map = defaultdict(set)
-            self._worker_instance_map = dict()
-
 
     def __contains__(self, chunk_key):
         return chunk_key in self._chunk_metas
@@ -69,15 +65,6 @@ class ChunkMetaStore(object):
         except KeyError:
             pass
 
-        print('chun_key', chunk_key, 'original worker', worker_meta.workers)
-        if options.vineyard.socket:
-            update_workers = set()
-            instance_id = self._worker_instance_map[worker_meta.workers[0]]
-            for w in self._instance_workers_map[instance_id]:
-                update_workers.add(w)
-            worker_meta.workers = tuple(update_workers)
-
-        print('chun_key', chunk_key, 'belong to workers', worker_meta.workers)
         self._chunk_metas[chunk_key] = worker_meta
         worker_chunks = self._worker_to_chunk_keys
         for w in worker_meta.workers:
@@ -97,13 +84,6 @@ class ChunkMetaStore(object):
                 worker_to_chunk_keys[w].remove(chunk_key)
             except KeyError:
                 pass
-
-    def update_workers_meta(self, workers_meta):
-        for w, meta in workers_meta.items():
-            instance_id = meta['vineyard']['instance_id']
-            self._worker_instance_map[w] = instance_id
-            self._instance_workers_map[instance_id].add(w)
-        logger.debug('worker_instance_map, %s instance_workers_map %s', self._worker_instance_map, self._instance_workers_map)
 
     def get(self, chunk_key, default=None):
         return self._chunk_metas.get(chunk_key, default)
@@ -188,6 +168,10 @@ class ChunkMetaActor(SchedulerActor):
         self._meta_cache = ChunkMetaCache()
         self._chunk_info_uid = chunk_info_uid
 
+        if options.vineyard.socket:
+            self._instance_workers_map = defaultdict(set)
+            self._worker_instance_map = dict()
+
         self._kv_store_ref = None
         self._resource_ref = None
         self._worker_blacklist = BlacklistSet(options.scheduler.worker_blacklist_time)
@@ -203,6 +187,13 @@ class ChunkMetaActor(SchedulerActor):
         self._resource_ref = self.ctx.actor_ref(ResourceActor.default_uid())
         if not self.ctx.has_actor(self._resource_ref):
             self._resource_ref = None
+
+    def update_workers_meta(self, workers_meta):
+        for w, meta in workers_meta.items():
+            instance_id = meta['vineyard']['instance_id']
+            self._worker_instance_map[w] = instance_id
+            self._instance_workers_map[instance_id].add(w)
+        logger.debug('worker_instance_map, %s instance_workers_map %s', self._worker_instance_map, self._instance_workers_map)
 
     def set_chunk_broadcasts(self, session_id, chunk_key, broadcast_dests):
         """
@@ -247,16 +238,25 @@ class ChunkMetaActor(SchedulerActor):
         :param broadcast: broadcast meta into registered destinations
         """
         if options.vineyard.socket:
+            # update vineyard instance id and workers mapping
             if self._resource_ref is None:
                 self._resource_ref = self.ctx.actor_ref(ResourceActor.default_uid())
             workers_meta = self._resource_ref.get_workers_meta()
-            self._meta_store.update_workers_meta(workers_meta)
-            self._meta_cache.update_workers_meta(workers_meta)
+            self.update_workers_meta(workers_meta)
 
         query_key = (session_id, chunk_key)
 
         workers = workers or ()
         workers = tuple(w for w in workers if w not in self._worker_blacklist)
+
+        if options.vineyard.socket and workers:
+            # add other workers with same vineyard instance id
+            update_workers = set()
+            for worker in workers:
+                instance_id = self._worker_instance_map[worker]
+                for w in self._instance_workers_map[instance_id]:
+                    update_workers.add(w)
+            workers = tuple(update_workers)
 
         # update input with existing value
         if query_key in self._meta_store:
@@ -327,6 +327,14 @@ class ChunkMetaActor(SchedulerActor):
         :param metas: meta data
         """
         for chunk_key, meta in zip(chunk_keys, metas):
+            if meta.workers and options.vineyard.socket:
+                # add other workers with same vineyard instance id
+                update_workers = set()
+                for worker in meta.workers:
+                    instance_id = self._worker_instance_map[worker]
+                    for w in self._instance_workers_map[instance_id]:
+                        update_workers.add(w)
+                metas.workers = tuple(update_workers)
             query_key = (session_id, chunk_key)
             self._meta_cache[query_key] = meta
 

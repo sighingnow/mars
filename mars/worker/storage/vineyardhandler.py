@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
 import logging
 
 from ...actors import FunctionActor
@@ -45,12 +46,14 @@ class VineyardKeyMapActor(FunctionActor):
         self._mapping = dict()
 
     def put(self, session_id, chunk_key, obj_id):
+        logger.debug('mapper put: session_id = %s, data_key = %s, data_id = %r', session_id, chunk_key, obj_id)
         session_chunk_key = (session_id, chunk_key)
         if session_chunk_key in self._mapping:
             raise StorageDataExists(session_chunk_key)
         self._mapping[session_chunk_key] = obj_id
 
     def get(self, session_id, chunk_key):
+        logger.debug('mapper get: session_id = %s, data_key = %s', session_id, chunk_key)
         return self._mapping.get((session_id, chunk_key))
 
     def delete(self, session_id, chunk_key):
@@ -136,15 +139,21 @@ class VineyardHandler(StorageHandler, ObjectStorageMixin):
         StorageHandler.__init__(self, storage_ctx, proc_id=proc_id)
         self._client = vineyard.connect(options.vineyard.socket)
         logger.debug('find mapper ref: %s', VineyardKeyMapActor.default_uid())
-        self._mapper_ref = self._storage_ctx.actor_ctx.actor_ref(VineyardKeyMapActor.default_uid())
+        # self._mapper_ref = self._storage_ctx.actor_ctx.actor_ref(VineyardKeyMapActor.default_uid())
+        from ..utils import WorkerClusterInfoActor
+        self._cluster_info = self._actor_ctx.actor_ref(WorkerClusterInfoActor.default_uid())
         logger.debug('find mapper ref done: %s', VineyardKeyMapActor.default_uid())
 
     def _new_object_id(self, session_id, data_key, data_id):
-        logger.debug('mapper put: session_id = %s, data_key = %s, data_id = %r, type=%s', session_id, data_key, data_id, type(data_key))
-        self._mapper_ref.put(session_id, data_key, data_id)
+        # self._mapper_ref.put(session_id, data_key, data_id)
+        addr = self._cluster_info.get_scheduler((session_id, data_key))
+        return self._actor_ctx.actor_ref(VineyardKeyMapActor.default_uid(), address=addr) \
+            .put(session_id, data_key, data_id)
 
     def _get_object_id(self, session_id, data_key):
-        obj_id = self._mapper_ref.get(session_id, data_key)
+        addr = self._cluster_info.get_scheduler((session_id, data_key))
+        obj_id = self._actor_ctx.actor_ref(VineyardKeyMapActor.default_uid(), address=addr) \
+            .get(session_id, data_key)
         logger.debug('mapper get: session_id = %s, data_key = %s, obj_id = %r', session_id, data_key, obj_id)
         if obj_id is None:
             raise KeyError((session_id, data_key))
@@ -208,7 +217,9 @@ class VineyardHandler(StorageHandler, ObjectStorageMixin):
         data_ids = [self._get_object_id(session_id, data_key)
                     for data_key in data_keys]
         self._client.delete(data_ids, deep=True)
-        self._mapper_ref.batch_delete(session_id, data_keys)
+        addr = self._cluster_info.get_scheduler((session_id, data_keys[0]))
+        self._actor_ctx.actor_ref(VineyardKeyMapActor.default_uid(), address=addr) \
+            .batch_delete(session_id, data_keys)
         self.unregister_data(session_id, data_keys, _tell=_tell)
 
 

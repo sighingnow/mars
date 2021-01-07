@@ -27,6 +27,8 @@ from .resource import ResourceActor
 from .session import SessionManagerActor
 from .utils import SchedulerClusterInfoActor
 
+from mars.worker.storage.vineyardhandler import VineyardKeyMapActor
+
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +44,7 @@ class SchedulerService(object):
         self._kv_store_ref = None
         self._node_info_ref = None
         self._result_receiver_ref = None
+        self._vineyard_key_map_ref = None
 
         options.scheduler.enable_failover = not (kwargs.pop('disable_failover', None) or False)
 
@@ -86,6 +89,9 @@ class SchedulerService(object):
         self._node_info_ref = pool.create_actor(NodeInfoActor, uid=NodeInfoActor.default_uid())
         kv_store.write(f'/schedulers/{endpoint}/meta',
                        json.dumps(self._resource_ref.get_workers_meta()))
+        if options.vineyard.socket:
+            # create VineyardKeyMapActor
+            self._vineyard_key_map_ref = pool.create_actor(VineyardKeyMapActor, uid=VineyardKeyMapActor.default_uid())
 
     def stop(self, pool):
         pool.destroy_actor(self._resource_ref)
