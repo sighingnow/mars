@@ -83,14 +83,6 @@ class WorkerActor(WorkerHasClusterInfoActor, PromiseActor):
         except TypeError:  # pragma: no cover
             self._plasma_client = plasma.connect(options.worker.plasma_socket, '', 0)
         self._shared_store = PlasmaSharedStore(self._plasma_client, mapper_ref)
-        '''
-        from .storage.vineyardhandler import VineyardKeyMapActor
-        from .storage.sharedstore import VineyardStore
-        mapper_ref = self.ctx.actor_ref(uid=VineyardKeyMapActor.default_uid())
-        self._plasma_client = None
-        self._shared_store = VineyardStore(mapper_ref)
-        '''
-
 
     @property
     def proc_id(self):

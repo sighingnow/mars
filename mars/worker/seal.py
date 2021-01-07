@@ -39,6 +39,8 @@ class SealActor(WorkerActor):
 
     @log_unhandled
     def seal_chunk(self, session_id, graph_key, chunk_key, keys, shape, record_type, dtype, fill_value):
+        from ..scheduler.chunkmeta import WorkerMeta
+
         chunk_bytes_size = np.prod(shape) * dtype.itemsize
         self._mem_quota_ref.request_batch_quota({chunk_key: chunk_bytes_size})
         if fill_value is None:
@@ -77,5 +79,5 @@ class SealActor(WorkerActor):
 
         self.storage_client.put_objects(
             session_id, [chunk_key], [ndarr], use_devices)
-        self.get_meta_client().set_chunk_meta(session_id, chunk_key, size=chunk_bytes_size,
-                                              shape=shape, workers=(self.address,))
+        worker_meta = WorkerMeta(chunk_bytes_size, shape, (self.address,))
+        self.get_meta_client().batch_set_chunk_meta(session_id, [chunk_key], worker_meta, _wait=False)

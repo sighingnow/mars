@@ -18,7 +18,6 @@ import json
 import logging
 
 from .. import kvstore
-from ..config import options
 from .chunkmeta import ChunkMetaActor
 from .custom_log import CustomLogMetaActor
 from .kvstore import KVStoreActor
@@ -26,9 +25,8 @@ from .node_info import NodeInfoActor
 from .resource import ResourceActor
 from .session import SessionManagerActor
 from .utils import SchedulerClusterInfoActor
-
-from mars.worker.storage.vineyardhandler import VineyardKeyMapActor
-
+from ..config import options
+from ..worker.storage.vineyardhandler import VineyardKeyMapActor
 
 logger = logging.getLogger(__name__)
 

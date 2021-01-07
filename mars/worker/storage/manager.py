@@ -100,7 +100,7 @@ class StorageManagerActor(WorkerActor):
         sizes = []
         shapes = []
         for key in data_keys:
-            if (session_id, key) not in self._data_to_locations:
+            if (session_id, key) not in self._data_attrs:
                 meta = self.get_meta_client().get_chunk_meta(session_id, key)
                 if meta and self.address in meta.workers:
                     keys_to_register.append(key)
@@ -115,20 +115,17 @@ class StorageManagerActor(WorkerActor):
         return [set(self._data_to_locations.get((session_id, key)) or ()) for key in data_keys]
 
     def get_data_sizes(self, session_id, data_keys):
-        if options.vineyard.socket:
-            self.sync_datas_with_chunkmeta(session_id, data_keys)
         return [a.size if a is not None else None
                 for a in self.get_data_attrs(session_id, data_keys)]
 
     def get_data_shapes(self, session_id, data_keys):
-        if options.vineyard.socket:
-            self.sync_datas_with_chunkmeta(session_id, data_keys)
         return [a.shape if a is not None else None
                 for a in self.get_data_attrs(session_id, data_keys)]
 
     def get_data_attrs(self, session_id, data_keys):
         if options.vineyard.socket:
             self.sync_datas_with_chunkmeta(session_id, data_keys)
+
         res = [None] * len(data_keys)
         for idx, k in enumerate(data_keys):
             try:

@@ -66,6 +66,7 @@ class ChunkMetaStore(object):
             pass
 
         self._chunk_metas[chunk_key] = worker_meta
+
         worker_chunks = self._worker_to_chunk_keys
         for w in worker_meta.workers:
             worker_chunks[w].add(chunk_key)
@@ -169,8 +170,8 @@ class ChunkMetaActor(SchedulerActor):
         self._chunk_info_uid = chunk_info_uid
 
         if options.vineyard.socket:
-            self._instance_workers_map = defaultdict(set)
-            self._worker_instance_map = dict()
+            self._vineyard_to_workers = defaultdict(set)
+            self._worker_to_vineyard = dict()
 
         self._kv_store_ref = None
         self._resource_ref = None
@@ -188,12 +189,24 @@ class ChunkMetaActor(SchedulerActor):
         if not self.ctx.has_actor(self._resource_ref):
             self._resource_ref = None
 
-    def update_workers_meta(self, workers_meta):
+    def sync_vineyard_workers_mapping(self):
+        if self._resource_ref is None:
+            self._resource_ref = self.ctx.actor_ref(ResourceActor.default_uid())
+        workers_meta = self._resource_ref.get_workers_meta()
+        self._worker_to_vineyard.clear()
+        self._vineyard_to_workers.clear()
         for w, meta in workers_meta.items():
             instance_id = meta['vineyard']['instance_id']
-            self._worker_instance_map[w] = instance_id
-            self._instance_workers_map[instance_id].add(w)
-        logger.debug('worker_instance_map, %s instance_workers_map %s', self._worker_instance_map, self._instance_workers_map)
+            self._worker_to_vineyard[w] = instance_id
+            self._vineyard_to_workers[instance_id].add(w)
+
+    def get_all_related_workers(self, workers):
+        all_related_workers = set()
+        for worker in workers:
+            instance_id = self._worker_instance_map[worker]
+            for rw in self._vineyard_to_workers[instance_id]:
+                all_related_workers.add(rw)
+        return tuple(all_related_workers)
 
     def set_chunk_broadcasts(self, session_id, chunk_key, broadcast_dests):
         """
@@ -237,26 +250,11 @@ class ChunkMetaActor(SchedulerActor):
         :param workers: workers holding the chunk
         :param broadcast: broadcast meta into registered destinations
         """
-        if options.vineyard.socket:
-            # update vineyard instance id and workers mapping
-            if self._resource_ref is None:
-                self._resource_ref = self.ctx.actor_ref(ResourceActor.default_uid())
-            workers_meta = self._resource_ref.get_workers_meta()
-            self.update_workers_meta(workers_meta)
 
         query_key = (session_id, chunk_key)
 
         workers = workers or ()
         workers = tuple(w for w in workers if w not in self._worker_blacklist)
-
-        if options.vineyard.socket and workers:
-            # add other workers with same vineyard instance id
-            update_workers = set()
-            for worker in workers:
-                instance_id = self._worker_instance_map[worker]
-                for w in self._instance_workers_map[instance_id]:
-                    update_workers.add(w)
-            workers = tuple(update_workers)
 
         # update input with existing value
         if query_key in self._meta_store:
@@ -298,7 +296,14 @@ class ChunkMetaActor(SchedulerActor):
         """
         query_dict = defaultdict(lambda: (list(), list()))
 
+        if options.vineyard.socket:
+            # sync the latest vineyard_workers mapping
+            self.sync_vineyard_workers_mapping()
+
         for key, meta in zip(keys, metas):
+            if options.vineyard.socket and meta.workers:
+                # get all related workers in the same vineyard instance.
+                meta.workers = self.get_all_related_workers(meta.workers)
             self.set_chunk_meta(session_id, key, size=meta.chunk_size, shape=meta.chunk_shape,
                                 workers=meta.workers, broadcast=False)
             try:
@@ -327,14 +332,6 @@ class ChunkMetaActor(SchedulerActor):
         :param metas: meta data
         """
         for chunk_key, meta in zip(chunk_keys, metas):
-            if meta.workers and options.vineyard.socket:
-                # add other workers with same vineyard instance id
-                update_workers = set()
-                for worker in meta.workers:
-                    instance_id = self._worker_instance_map[worker]
-                    for w in self._instance_workers_map[instance_id]:
-                        update_workers.add(w)
-                metas.workers = tuple(update_workers)
             query_key = (session_id, chunk_key)
             self._meta_cache[query_key] = meta
 

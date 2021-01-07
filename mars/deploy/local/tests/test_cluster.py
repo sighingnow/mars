@@ -335,7 +335,6 @@ class Test(unittest.TestCase):
 
             np.testing.assert_array_equal(r1, r2)
             np.testing.assert_array_equal(r1, np.ones((5, 5)) * 2)
-            print("----------------------------------------")
             with new_session(cluster.endpoint) as session2:
                 a = mt.random.rand(10, 5)
                 idx = slice(0, 5), slice(0, 5)
@@ -344,7 +343,6 @@ class Test(unittest.TestCase):
                 r = session2.run(a[idx], timeout=_exec_timeout)
 
                 np.testing.assert_array_equal(r, np.ones((5, 5)) * 2)
-            print("###########################################")
             with new_session(cluster.endpoint) as session3:
                 a = mt.random.rand(100, 5)
 
@@ -355,7 +353,6 @@ class Test(unittest.TestCase):
                 np.testing.assert_array_equal(r1, expected[:10])
                 np.testing.assert_array_equal(r2, expected[10:20])
 
-            print("*******************************************")
             with new_session(cluster.endpoint) as session4:
                 a = mt.random.rand(100, 5)
 
@@ -366,7 +363,6 @@ class Test(unittest.TestCase):
                 np.testing.assert_array_equal(r[:10], np.ones((10, 5)))
                 np.testing.assert_array_equal(r[10:20], np.ones((10, 5)) * 2)
 
-            print("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&")
             with new_session(cluster.endpoint) as session5:
                 raw = np.random.rand(10, 10)
                 a = mt.tensor(raw, chunk_size=(5, 4))
@@ -374,7 +370,6 @@ class Test(unittest.TestCase):
                 r = session5.run(b, timeout=_exec_timeout, compose=False)
 
                 np.testing.assert_array_equal(r, raw[raw.argmin(axis=1), np.arange(10)])
-            print("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^")
 
     def testBoolIndexingExecute(self, *_):
         with new_cluster(scheduler_n_process=2, worker_n_process=2,

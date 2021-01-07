@@ -19,7 +19,8 @@ from ...actors import FunctionActor
 from ...config import options
 from ...errors import StorageDataExists
 from ...serialize import dataserializer
-from ..dataio import ArrowBufferIO
+from ..dataio import ArrowComponentsIO
+from ..utils import WorkerClusterInfoActor
 from .core import StorageHandler, ObjectStorageMixin, BytesStorageIO, \
     DataStorageDevice, wrap_promised, register_storage_handler_cls
 
@@ -39,7 +40,7 @@ logger = logging.getLogger(__name__)
 class VineyardKeyMapActor(FunctionActor):
     @classmethod
     def default_uid(cls):
-        return 'w:0:' + cls.__name__
+        return 's:0:' + cls.__name__
 
     def __init__(self):
         super().__init__()
@@ -139,14 +140,9 @@ class VineyardHandler(StorageHandler, ObjectStorageMixin):
     def __init__(self, storage_ctx, proc_id=None):
         StorageHandler.__init__(self, storage_ctx, proc_id=proc_id)
         self._client = vineyard.connect(options.vineyard.socket)
-        logger.debug('find mapper ref: %s', VineyardKeyMapActor.default_uid())
-        # self._mapper_ref = self._storage_ctx.actor_ctx.actor_ref(VineyardKeyMapActor.default_uid())
-        from ..utils import WorkerClusterInfoActor
         self._cluster_info = self._actor_ctx.actor_ref(WorkerClusterInfoActor.default_uid())
-        logger.debug('find mapper ref done: %s', VineyardKeyMapActor.default_uid())
 
     def _new_object_id(self, session_id, data_key, data_id):
-        # self._mapper_ref.put(session_id, data_key, data_id)
         addr = self._cluster_info.get_scheduler((session_id, data_key))
         return self._actor_ctx.actor_ref(VineyardKeyMapActor.default_uid(), address=addr) \
             .put(session_id, data_key, data_id)
@@ -155,11 +151,9 @@ class VineyardHandler(StorageHandler, ObjectStorageMixin):
         addr = self._cluster_info.get_scheduler((session_id, data_key))
         obj_id = self._actor_ctx.actor_ref(VineyardKeyMapActor.default_uid(), address=addr) \
             .get(session_id, data_key)
-        logger.debug('mapper get: session_id = %s, data_key = %s, obj_id = %r', session_id, data_key, obj_id)
         if obj_id is None:
             # object already deleted by other worker
             return []
-            # raise KeyError((session_id, data_key))
         return obj_id
 
     @wrap_promised
@@ -179,14 +173,11 @@ class VineyardHandler(StorageHandler, ObjectStorageMixin):
     @wrap_promised
     def get_objects(self, session_id, data_keys, serialize=False, _promise=False):
         data_ids = [self._get_object_id(session_id, data_key) for data_key in data_keys]
-        logger.debug('get vineyard objects: session_id = %s, data_keys = %s', session_id, data_keys)
         return [self._client.get(data_id) for data_id in data_ids]
 
     @wrap_promised
     def put_objects(self, session_id, data_keys, objs, sizes=None, shapes=None,
                     serialize=False, pin_token=None, _promise=False):
-        logger.debug('put vineyard objects: session_id = %s, data_keys = %s', session_id, data_keys)
-
         for data_key, obj in zip(data_keys, objs):
             if isinstance(obj, pyarrow.SerializedPyObject):
                 obj = obj.deserialize(dataserializer.mars_serialize_context())
@@ -222,7 +213,7 @@ class VineyardHandler(StorageHandler, ObjectStorageMixin):
         try:
             self._client.delete(data_ids, deep=True)
         except vineyard._C.ObjectNotExistsException:
-            # the object may deleted by other worker, pass
+            # the object may be deleted by other worker
             pass
         if data_ids:
             addr = self._cluster_info.get_scheduler((session_id, data_keys[0]))
