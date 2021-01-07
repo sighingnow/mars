@@ -407,7 +407,6 @@ default_options.register_option('optimize_tileable_graph', True, validator=is_bo
 # eager mode
 default_options.register_option('eager_mode', False, validator=is_bool)
 
-
 # client serialize type
 default_options.register_option('client.serial_type', 'arrow', validator=is_string)
 

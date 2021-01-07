@@ -213,7 +213,7 @@ class VineyardHandler(StorageHandler, ObjectStorageMixin):
         try:
             self._client.delete(data_ids, deep=True)
         except vineyard._C.ObjectNotExistsException:
-            # the object may be deleted by other worker
+            # the object may has been deleted by other worker
             pass
         if data_ids:
             addr = self._cluster_info.get_scheduler((session_id, data_keys[0]))
