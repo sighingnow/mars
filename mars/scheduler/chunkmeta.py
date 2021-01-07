@@ -203,7 +203,7 @@ class ChunkMetaActor(SchedulerActor):
     def get_all_related_workers(self, workers):
         all_related_workers = set()
         for worker in workers:
-            instance_id = self._worker_instance_map[worker]
+            instance_id = self._worker_to_vineyard[worker]
             for rw in self._vineyard_to_workers[instance_id]:
                 all_related_workers.add(rw)
         return tuple(all_related_workers)

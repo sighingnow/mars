@@ -211,7 +211,7 @@ class VineyardHandler(StorageHandler, ObjectStorageMixin):
         data_ids = [self._get_object_id(session_id, data_key)
                     for data_key in data_keys]
         try:
-            self._client.delete(data_ids, deep=True)
+            self._client.delete(data_ids, force=False, deep=True)
         except vineyard._C.ObjectNotExistsException:
             # the object may has been deleted by other worker
             pass
