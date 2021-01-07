@@ -15,7 +15,9 @@
 import itertools
 from collections import defaultdict
 
+from .core import DataStorageDevice
 from ..utils import WorkerActor
+from ...config import options
 
 
 class DataAttrs(object):
@@ -93,18 +95,40 @@ class StorageManagerActor(WorkerActor):
             except KeyError:
                 pass
 
+    def sync_datas_with_chunkmeta(self, session_id, data_keys):
+        keys_to_register = []
+        sizes = []
+        shapes = []
+        for key in data_keys:
+            if (session_id, key) not in self._data_to_locations:
+                meta = self.get_meta_client().get_chunk_meta(session_id, key)
+                if meta and self.address in meta.workers:
+                    keys_to_register.append(key)
+                    sizes.append(meta.chunk_size)
+                    shapes.append(meta.chunk_shape)
+        self.register_data(session_id, keys_to_register, (0, DataStorageDevice.VINEYARD), sizes, shapes)
+
     def get_data_locations(self, session_id, data_keys):
+        if options.vineyard.socket:
+            self.sync_datas_with_chunkmeta(session_id, data_keys)
+
         return [set(self._data_to_locations.get((session_id, key)) or ()) for key in data_keys]
 
     def get_data_sizes(self, session_id, data_keys):
+        if options.vineyard.socket:
+            self.sync_datas_with_chunkmeta(session_id, data_keys)
         return [a.size if a is not None else None
                 for a in self.get_data_attrs(session_id, data_keys)]
 
     def get_data_shapes(self, session_id, data_keys):
+        if options.vineyard.socket:
+            self.sync_datas_with_chunkmeta(session_id, data_keys)
         return [a.shape if a is not None else None
                 for a in self.get_data_attrs(session_id, data_keys)]
 
     def get_data_attrs(self, session_id, data_keys):
+        if options.vineyard.socket:
+            self.sync_datas_with_chunkmeta(session_id, data_keys)
         res = [None] * len(data_keys)
         for idx, k in enumerate(data_keys):
             try:

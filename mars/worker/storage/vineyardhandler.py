@@ -63,6 +63,7 @@ class VineyardKeyMapActor(FunctionActor):
             pass
 
     def batch_delete(self, session_id, chunk_keys):
+        logger.debug('mapper delete: session_id = %s, data_keys = %s', session_id, chunk_keys)
         for k in chunk_keys:
             self.delete(session_id, k)
 
@@ -156,7 +157,9 @@ class VineyardHandler(StorageHandler, ObjectStorageMixin):
             .get(session_id, data_key)
         logger.debug('mapper get: session_id = %s, data_key = %s, obj_id = %r', session_id, data_key, obj_id)
         if obj_id is None:
-            raise KeyError((session_id, data_key))
+            # object already deleted by other worker
+            return []
+            # raise KeyError((session_id, data_key))
         return obj_id
 
     @wrap_promised
@@ -216,10 +219,15 @@ class VineyardHandler(StorageHandler, ObjectStorageMixin):
     def delete(self, session_id, data_keys, _tell=False):
         data_ids = [self._get_object_id(session_id, data_key)
                     for data_key in data_keys]
-        self._client.delete(data_ids, deep=True)
-        addr = self._cluster_info.get_scheduler((session_id, data_keys[0]))
-        self._actor_ctx.actor_ref(VineyardKeyMapActor.default_uid(), address=addr) \
-            .batch_delete(session_id, data_keys)
+        try:
+            self._client.delete(data_ids, deep=True)
+        except vineyard._C.ObjectNotExistsException:
+            # the object may deleted by other worker, pass
+            pass
+        if data_ids:
+            addr = self._cluster_info.get_scheduler((session_id, data_keys[0]))
+            self._actor_ctx.actor_ref(VineyardKeyMapActor.default_uid(), address=addr) \
+                .batch_delete(session_id, data_keys)
         self.unregister_data(session_id, data_keys, _tell=_tell)
 
 
