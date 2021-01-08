@@ -19,7 +19,7 @@ from ...actors import FunctionActor
 from ...config import options
 from ...errors import StorageDataExists
 from ...serialize import dataserializer
-from ..dataio import ArrowComponentsIO
+from ..dataio import ArrowBufferIO
 from ..utils import WorkerClusterInfoActor
 from .core import StorageHandler, ObjectStorageMixin, BytesStorageIO, \
     DataStorageDevice, wrap_promised, register_storage_handler_cls

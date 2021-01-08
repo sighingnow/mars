@@ -321,7 +321,6 @@ class Test(unittest.TestCase):
                 s_expected = np.linalg.svd(raw, full_matrices=False)[1]
                 np.testing.assert_allclose(s_result, s_expected)
 
-    # not passed with vineyard
     def testIndexTensorExecute(self, *_):
         with new_cluster(scheduler_n_process=2, worker_n_process=2,
                          shared_memory='20M') as cluster:
@@ -518,7 +517,7 @@ class Test(unittest.TestCase):
                 r4 = session.run(a4, timeout=_exec_timeout)
                 np.testing.assert_array_equal(r4, r1)
 
-    @unittest.skip("not supported numpy.ndarray of OBJECT type")
+    @unittest.skipIf(options.vineyard.socket, reason='not supported numpy.ndarray of OBJECT type')
     def testFetchDataFrame(self, *_):
         from mars.dataframe.datasource.dataframe import from_pandas as from_pandas_df
         from mars.dataframe.arithmetic import add
@@ -646,7 +645,6 @@ class Test(unittest.TestCase):
             with self.assertRaises(ValueError):
                 web_session.fetch(b)
 
-    # not passed with vineyard
     def testEagerMode(self, *_):
         with new_cluster(scheduler_n_process=2, worker_n_process=2,
                          shared_memory='20M', web=True) as cluster:
@@ -729,7 +727,7 @@ class Test(unittest.TestCase):
                 web_session = Session.default_or_local()._sess
                 self.assertEqual(web_session.get_task_count(), 4)
 
-    @unittest.skip("not supported")
+    @unittest.skipIf(options.vineyard.socket, reason='not supported')
     def testSparse(self, *_):
         import scipy.sparse as sps
 
@@ -755,7 +753,7 @@ class Test(unittest.TestCase):
             r2 = session.run(arr2, compose=False, timeout=_exec_timeout)
             np.testing.assert_array_equal(r1, r2)
 
-    @unittest.skip("not supported: not know why")
+    @unittest.skipIf(options.vineyard.socket, reason='not supported: not know why')
     def testExistingOperand(self, *_):
         with new_cluster(scheduler_n_process=2, worker_n_process=2,
                          shared_memory='20M') as cluster:
@@ -849,7 +847,6 @@ class Test(unittest.TestCase):
             r_slice5 = web_session.fetch(a[4])
             np.testing.assert_array_equal(r[4], r_slice5)
 
-    # not passed with vineyard
     def testFetchDataFrameSlices(self, *_):
         with new_cluster(scheduler_n_process=2, worker_n_process=2,
                          shared_memory='20M', web=True) as cluster:
@@ -950,7 +947,7 @@ class Test(unittest.TestCase):
             expected_msg = f"The session with id = {web_sess1.session_id} doesn't exist"
             self.assertEqual(cm.exception.args[0], expected_msg)
 
-    @unittest.skip("not supported: tensor order")
+    @unittest.skipIf(options.vineyard.socket, reason='not supported: tensor order')
     def testTensorOrder(self, *_):
         with new_cluster(scheduler_n_process=2, worker_n_process=2,
                          shared_memory='20M', web=True) as cluster:
@@ -974,7 +971,6 @@ class Test(unittest.TestCase):
             self.assertEqual(res.flags['C_CONTIGUOUS'], expected.flags['C_CONTIGUOUS'])
             self.assertEqual(res.flags['F_CONTIGUOUS'], expected.flags['F_CONTIGUOUS'])
 
-    # not passed with vineyard
     def testIterativeDependency(self, *_):
         with new_cluster(scheduler_n_process=2, worker_n_process=2,
                          shared_memory='20M', web=True):
@@ -1000,7 +996,7 @@ class Test(unittest.TestCase):
                 r4 = mdf3.to_pandas()
                 pd.testing.assert_frame_equal(df, r4.reset_index(drop=True))
 
-    @unittest.skip("Not supported: mars.errors.StorageDataExists")
+    @unittest.skipIf(options.vineyard.socket, reason='Not supported: mars.errors.StorageDataExists')
     def testDataFrameShuffle(self, *_):
         from mars.dataframe.datasource.dataframe import from_pandas as from_pandas_df
         from mars.dataframe.merge.merge import merge
@@ -1091,7 +1087,6 @@ class Test(unittest.TestCase):
                     result = np.asarray(f[dataset])
                     np.testing.assert_array_equal(result, raw)
 
-    # not passed with vineyard
     def testRemoteFunctionInLocalCluster(self):
         with new_cluster(scheduler_n_process=2, worker_n_process=3,
                          shared_memory='20M', modules=[__name__], web=True) as cluster:
