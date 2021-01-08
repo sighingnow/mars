@@ -15,9 +15,8 @@
 import itertools
 from collections import defaultdict
 
-from .core import DataStorageDevice
-from ..utils import WorkerActor
 from ...config import options
+from ..utils import WorkerActor
 
 
 class DataAttrs(object):
@@ -95,22 +94,23 @@ class StorageManagerActor(WorkerActor):
             except KeyError:
                 pass
 
-    def sync_datas_with_chunkmeta(self, session_id, data_keys):
+    def sync_datas_from_chunkmeta(self, session_id, data_keys):
+        from .core import DataStorageDevice
+
         keys_to_register = []
         sizes = []
         shapes = []
-        for key in data_keys:
-            if (session_id, key) not in self._data_attrs:
-                meta = self.get_meta_client().get_chunk_meta(session_id, key)
-                if meta and self.address in meta.workers:
-                    keys_to_register.append(key)
-                    sizes.append(meta.chunk_size)
-                    shapes.append(meta.chunk_shape)
+        metas = self.get_meta_client().batch_get_chunk_meta(session_id, data_keys)
+        for key, meta in zip(data_keys, metas):
+            if (session_id, key) not in self._data_attrs and meta and self.address in meta.workers:
+                keys_to_register.append(key)
+                sizes.append(meta.chunk_size)
+                shapes.append(meta.chunk_shape)
         self.register_data(session_id, keys_to_register, (0, DataStorageDevice.VINEYARD), sizes, shapes)
 
     def get_data_locations(self, session_id, data_keys):
         if options.vineyard.socket:
-            self.sync_datas_with_chunkmeta(session_id, data_keys)
+            self.sync_datas_from_chunkmeta(session_id, data_keys)
 
         return [set(self._data_to_locations.get((session_id, key)) or ()) for key in data_keys]
 
@@ -124,7 +124,7 @@ class StorageManagerActor(WorkerActor):
 
     def get_data_attrs(self, session_id, data_keys):
         if options.vineyard.socket:
-            self.sync_datas_with_chunkmeta(session_id, data_keys)
+            self.sync_datas_from_chunkmeta(session_id, data_keys)
 
         res = [None] * len(data_keys)
         for idx, k in enumerate(data_keys):

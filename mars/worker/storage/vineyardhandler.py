@@ -57,6 +57,13 @@ class VineyardKeyMapActor(FunctionActor):
         logger.debug('mapper get: session_id = %s, data_key = %s', session_id, chunk_key)
         return self._mapping.get((session_id, chunk_key))
 
+    def batch_get(self, session_id, chunk_keys):
+        obj_ids = []
+        for key in chunk_keys:
+            if (session_id, key) in self._mapping:
+                obj_ids.append(self._mapping[(session_id, key)])
+        return obj_ids
+
     def delete(self, session_id, chunk_key):
         try:
             del self._mapping[(session_id, chunk_key)]
@@ -151,10 +158,13 @@ class VineyardHandler(StorageHandler, ObjectStorageMixin):
         addr = self._cluster_info.get_scheduler((session_id, data_key))
         obj_id = self._actor_ctx.actor_ref(VineyardKeyMapActor.default_uid(), address=addr) \
             .get(session_id, data_key)
-        if obj_id is None:
-            # object already deleted by other worker
-            return []
         return obj_id
+
+    def _batch_get_object_id(self, session_id, data_keys):
+        addr = self._cluster_info.get_scheduler((session_id, data_keys[0]))
+        obj_ids = self._actor_ctx.actor_ref(VineyardKeyMapActor.default_uid(), address=addr) \
+            .batch_get(session_id, data_keys)
+        return obj_ids
 
     @wrap_promised
     def create_bytes_reader(self, session_id, data_key, packed=False, packed_compression=None,
@@ -208,10 +218,9 @@ class VineyardHandler(StorageHandler, ObjectStorageMixin):
         return self.transfer_in_runner(session_id, data_keys, src_handler, _fallback)
 
     def delete(self, session_id, data_keys, _tell=False):
-        data_ids = [self._get_object_id(session_id, data_key)
-                    for data_key in data_keys]
+        data_ids = self._batch_get_object_id(session_id, data_keys)
         try:
-            self._client.delete(data_ids, force=False, deep=True)
+            self._client.delete(data_ids, deep=True)
         except vineyard._C.ObjectNotExistsException:
             # the object may has been deleted by other worker
             pass

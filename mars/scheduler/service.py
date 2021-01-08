@@ -18,6 +18,8 @@ import json
 import logging
 
 from .. import kvstore
+from ..config import options
+from ..worker import VineyardKeyMapActor
 from .chunkmeta import ChunkMetaActor
 from .custom_log import CustomLogMetaActor
 from .kvstore import KVStoreActor
@@ -25,8 +27,6 @@ from .node_info import NodeInfoActor
 from .resource import ResourceActor
 from .session import SessionManagerActor
 from .utils import SchedulerClusterInfoActor
-from ..config import options
-from ..worker.storage.vineyardhandler import VineyardKeyMapActor
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +88,7 @@ class SchedulerService(object):
         kv_store.write(f'/schedulers/{endpoint}/meta',
                        json.dumps(self._resource_ref.get_workers_meta()))
         if options.vineyard.socket:
-            # create VineyardKeyMapActor
+            # create global VineyardKeyMapActor
             self._vineyard_key_map_ref = pool.create_actor(VineyardKeyMapActor, uid=VineyardKeyMapActor.default_uid())
 
     def stop(self, pool):
