@@ -281,6 +281,7 @@ class WorkerService(object):
         if not distributed:
             self._n_cpu_process = pool.cluster_info.n_process - 1 - process_start_index
 
+        print('self._n_cpu_process = ', self._n_cpu_process)
         for cpu_id in range(self._n_cpu_process):
             uid = f'w:{cpu_id + 1}:mars-cpu-calc'
             actor = actor_holder.create_actor(CpuCalcActor, uid=uid)

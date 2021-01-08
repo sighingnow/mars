@@ -18,7 +18,7 @@ from ...actors import FunctionActor
 from ...config import options
 from ...errors import StorageDataExists
 from ...serialize import dataserializer
-from ..dataio import ArrowComponentsIO
+from ..dataio import ArrowBufferIO
 from .core import StorageHandler, ObjectStorageMixin, BytesStorageIO, \
     DataStorageDevice, wrap_promised, register_storage_handler_cls
 
@@ -77,7 +77,7 @@ class VineyardBytesIO(BytesStorageIO):
         super().__init__(session_id, data_key, mode=mode, handler=handler)
         self._client = vineyard_client
         self._data_id = data_id
-        self._components = None
+        self._buffer = None
         self._offset = 0
         self._nbytes = nbytes
         self._holder_ref = self._storage_ctx.actor_ctx.actor_ref(SharedHolderActor.default_uid())
@@ -93,17 +93,19 @@ class VineyardBytesIO(BytesStorageIO):
                          session_id, data_key, data_id, type(data_id))
             data = self._client.get(data_id)
 
-            self._components = pyarrow.serialize(data, dataserializer.mars_serialize_context()).to_components()
+            self._buffer = pyarrow.serialize(data, dataserializer.mars_serialize_context()).to_buffer()
             if packed:
-                self._buf = ArrowComponentsIO(
-                    self._components, 'r', compress_out=compress, block_size=block_size)
+                self._buf = ArrowBufferIO(
+                    self._buffer, 'r', compress_out=compress, block_size=block_size)
+                self._nbytes = len(self._buffer)
             else:
-                raise NotImplementedError('Unknown how to read vineyard values in a unpacked way')
+                self._mv = memoryview(self._buffer)
+                self._nbytes = len(self._buffer)
         else:
             raise NotImplementedError
 
     def __del__(self):
-        self._buf = self._components = None
+        self._buf = self._buffer = None
 
     @property
     def nbytes(self):
@@ -113,12 +115,17 @@ class VineyardBytesIO(BytesStorageIO):
         if self._packed:
             return self._buf.read(size)
         else:
-            raise NotImplementedError('Unknown how to read vineyard values in a unpacked way')
+            if size < 0:
+                size = self._nbytes
+            right_pos = min(self._nbytes, self._offset + size)
+            ret = self._mv[self._offset:right_pos]
+            self._offset = right_pos
+            return ret
 
     def close(self, finished=True):
         if self._closed:
             return
-        self._buf = self._components = None
+        self._buf = self._buffer = None
         super().close(finished=finished)
 
 
