@@ -166,6 +166,11 @@ class VineyardHandler(StorageHandler, ObjectStorageMixin):
             .batch_get(session_id, data_keys)
         return obj_ids
 
+    def _batch_delete_from_key_mapper(self, session_id, data_keys):
+        addr = self._cluster_info.get_scheduler((session_id, data_keys[0]))
+        self._actor_ctx.actor_ref(VineyardKeyMapActor.default_uid(), address=addr) \
+            .batch_delete(session_id, data_keys)
+
     @wrap_promised
     def create_bytes_reader(self, session_id, data_key, packed=False, packed_compression=None,
                             _promise=False):
@@ -225,9 +230,7 @@ class VineyardHandler(StorageHandler, ObjectStorageMixin):
             # the object may has been deleted by other worker
             pass
         if data_ids:
-            addr = self._cluster_info.get_scheduler((session_id, data_keys[0]))
-            self._actor_ctx.actor_ref(VineyardKeyMapActor.default_uid(), address=addr) \
-                .batch_delete(session_id, data_keys)
+            self._batch_delete_from_key_mapper(session_id, data_keys)
         self.unregister_data(session_id, data_keys, _tell=_tell)
 
 
