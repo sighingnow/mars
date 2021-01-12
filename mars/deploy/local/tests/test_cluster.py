@@ -726,7 +726,6 @@ class Test(unittest.TestCase):
                 web_session = Session.default_or_local()._sess
                 self.assertEqual(web_session.get_task_count(), 4)
 
-    @unittest.skipIf(options.vineyard.socket, reason='not supported')
     def testSparse(self, *_):
         import scipy.sparse as sps
 

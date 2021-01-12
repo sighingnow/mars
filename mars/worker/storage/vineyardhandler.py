@@ -18,6 +18,7 @@ import logging
 from ...actors import FunctionActor
 from ...config import options
 from ...errors import StorageDataExists
+from ...lib import sparse
 from ...serialize import dataserializer
 from ..dataio import ArrowBufferIO
 from ..utils import WorkerClusterInfoActor
@@ -26,6 +27,9 @@ from .core import StorageHandler, ObjectStorageMixin, BytesStorageIO, \
 
 try:
     import vineyard
+    from vineyard._C import ObjectMeta
+    from vineyard.data.utils import from_json, to_json
+    from vineyard import default_builder_context, default_resolver_context
 except ImportError:
     vineyard = None
 try:
@@ -35,6 +39,26 @@ except ImportError:
 
 
 logger = logging.getLogger(__name__)
+
+
+def mars_sparse_matrix_builder(client, value, builder, **kw):
+    meta = ObjectMeta()
+    meta['typename'] = 'vineyard::SparseMatrix<%s>' % value.dtype.name
+    meta['shape_'] = to_json(value.shape)
+    meta.add_member('spmatrix', builder.run(client, value.spmatrix, **kw))
+    return client.create_metadata(meta)
+
+
+def mars_sparse_matrix_resolver(obj, resolver):
+    meta = obj.meta
+    shape = from_json(meta['shape_'])
+    spmatrix = resolver.run(obj.member('spmatrix'))
+    return sparse.matrix.SparseMatrix(spmatrix, shape=shape)
+
+
+if vineyard is not None:
+    default_builder_context.register(sparse.matrix.SparseMatrix, mars_sparse_matrix_builder)
+    default_resolver_context.register('vineyard::SparseMatrix', mars_sparse_matrix_resolver)
 
 
 class VineyardKeyMapActor(FunctionActor):
