@@ -415,6 +415,7 @@ default_options.register_option('custom_log_dir', None, validator=any_validator(
 
 # vineyard
 default_options.register_option('vineyard.socket', '/tmp/vineyard/vineyard.sock')
+# default_options.register_option('vineyard.socket', None)
 
 _options_local = threading.local()
 _options_local.default_options = default_options

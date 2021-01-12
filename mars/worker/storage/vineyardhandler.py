@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
 import logging
 
 from ...actors import FunctionActor
@@ -19,6 +20,7 @@ from ...config import options
 from ...errors import StorageDataExists
 from ...serialize import dataserializer
 from ..dataio import ArrowBufferIO
+from ..utils import WorkerClusterInfoActor
 from .core import StorageHandler, ObjectStorageMixin, BytesStorageIO, \
     DataStorageDevice, wrap_promised, register_storage_handler_cls
 
@@ -38,20 +40,29 @@ logger = logging.getLogger(__name__)
 class VineyardKeyMapActor(FunctionActor):
     @classmethod
     def default_uid(cls):
-        return 'w:0:' + cls.__name__
+        return 's:0:' + cls.__name__
 
     def __init__(self):
         super().__init__()
         self._mapping = dict()
 
     def put(self, session_id, chunk_key, obj_id):
+        logger.debug('mapper put: session_id = %s, data_key = %s, data_id = %r', session_id, chunk_key, obj_id)
         session_chunk_key = (session_id, chunk_key)
         if session_chunk_key in self._mapping:
             raise StorageDataExists(session_chunk_key)
         self._mapping[session_chunk_key] = obj_id
 
     def get(self, session_id, chunk_key):
+        logger.debug('mapper get: session_id = %s, data_key = %s', session_id, chunk_key)
         return self._mapping.get((session_id, chunk_key))
+
+    def batch_get(self, session_id, chunk_keys):
+        obj_ids = []
+        for key in chunk_keys:
+            if (session_id, key) in self._mapping:
+                obj_ids.append(self._mapping[(session_id, key)])
+        return obj_ids
 
     def delete(self, session_id, chunk_key):
         try:
@@ -60,6 +71,7 @@ class VineyardKeyMapActor(FunctionActor):
             pass
 
     def batch_delete(self, session_id, chunk_keys):
+        logger.debug('mapper delete: session_id = %s, data_keys = %s', session_id, chunk_keys)
         for k in chunk_keys:
             self.delete(session_id, k)
 
@@ -135,20 +147,29 @@ class VineyardHandler(StorageHandler, ObjectStorageMixin):
     def __init__(self, storage_ctx, proc_id=None):
         StorageHandler.__init__(self, storage_ctx, proc_id=proc_id)
         self._client = vineyard.connect(options.vineyard.socket)
-        logger.debug('find mapper ref: %s', VineyardKeyMapActor.default_uid())
-        self._mapper_ref = self._storage_ctx.actor_ctx.actor_ref(VineyardKeyMapActor.default_uid())
-        logger.debug('find mapper ref done: %s', VineyardKeyMapActor.default_uid())
+        self._cluster_info = self._actor_ctx.actor_ref(WorkerClusterInfoActor.default_uid())
 
     def _new_object_id(self, session_id, data_key, data_id):
-        logger.debug('mapper put: session_id = %s, data_key = %s, data_id = %r', session_id, data_key, data_id)
-        self._mapper_ref.put(session_id, data_key, data_id)
+        addr = self._cluster_info.get_scheduler((session_id, data_key))
+        return self._actor_ctx.actor_ref(VineyardKeyMapActor.default_uid(), address=addr) \
+            .put(session_id, data_key, data_id)
 
     def _get_object_id(self, session_id, data_key):
-        obj_id = self._mapper_ref.get(session_id, data_key)
-        logger.debug('mapper get: session_id = %s, data_key = %s, obj_id = %r', session_id, data_key, obj_id)
-        if obj_id is None:
-            raise KeyError((session_id, data_key))
+        addr = self._cluster_info.get_scheduler((session_id, data_key))
+        obj_id = self._actor_ctx.actor_ref(VineyardKeyMapActor.default_uid(), address=addr) \
+            .get(session_id, data_key)
         return obj_id
+
+    def _batch_get_object_id(self, session_id, data_keys):
+        addr = self._cluster_info.get_scheduler((session_id, data_keys[0]))
+        obj_ids = self._actor_ctx.actor_ref(VineyardKeyMapActor.default_uid(), address=addr) \
+            .batch_get(session_id, data_keys)
+        return obj_ids
+
+    def _batch_delete_from_key_mapper(self, session_id, data_keys):
+        addr = self._cluster_info.get_scheduler((session_id, data_keys[0]))
+        self._actor_ctx.actor_ref(VineyardKeyMapActor.default_uid(), address=addr) \
+            .batch_delete(session_id, data_keys)
 
     @wrap_promised
     def create_bytes_reader(self, session_id, data_key, packed=False, packed_compression=None,
@@ -202,9 +223,14 @@ class VineyardHandler(StorageHandler, ObjectStorageMixin):
         return self.transfer_in_runner(session_id, data_keys, src_handler, _fallback)
 
     def delete(self, session_id, data_keys, _tell=False):
-        data_ids = [self._get_object_id(session_id, data_key)
-                    for data_key in data_keys]
-        self._client.delete(data_ids, deep=True)
+        data_ids = self._batch_get_object_id(session_id, data_keys)
+        try:
+            self._client.delete(data_ids, deep=True)
+        except vineyard._C.ObjectNotExistsException:
+            # the object may has been deleted by other worker
+            pass
+        if data_ids:
+            self._batch_delete_from_key_mapper(session_id, data_keys)
         self.unregister_data(session_id, data_keys, _tell=_tell)
 
 
