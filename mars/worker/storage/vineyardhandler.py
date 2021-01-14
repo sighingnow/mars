@@ -28,7 +28,8 @@ try:
     from vineyard._C import ObjectMeta
     from vineyard.core import default_builder_context, default_resolver_context
     from vineyard.data.utils import from_json, to_json
-except ImportError:
+except ImportError as e:
+    print(e)
     vineyard = None
 try:
     import pyarrow
